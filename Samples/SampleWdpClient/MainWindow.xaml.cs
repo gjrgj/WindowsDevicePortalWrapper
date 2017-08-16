@@ -17,6 +17,9 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using Microsoft.Tools.WindowsDevicePortal;
 using static Microsoft.Tools.WindowsDevicePortal.DevicePortal;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
 
 namespace SampleWdpClient
 {
@@ -79,13 +82,19 @@ namespace SampleWdpClient
 
             portal = new DevicePortal(
                 new DefaultDevicePortalConnection(
-                    this.address.Text,
-                    this.username.Text,
-                    this.password.Password));
+                    //this.address.Text,
+                    //this.username.Text,
+                    //this.password.Password
+                    "https://192.168.1.24",
+                    "george",
+                    "gjergji"
+                    //"https://192.168.1.41",
+                    //"irisvr",
+                    //"hololens"
+                    ));
 
             // Add additional handling for untrusted certs.
             portal.UnvalidatedCert += DoCertValidation;
-
             StringBuilder sb = new StringBuilder();
             Task connectTask = new Task(
                 async () =>
@@ -127,7 +136,204 @@ namespace SampleWdpClient
                     this.MarshalEnableConnectionControls(true);
                 });
 
-            connectTask.Start();
+            connectTask.Wait();
+
+            // reset directory
+            Task deleteTask = new Task(
+                async () =>
+                {
+                    sb.Append(this.MarshalGetCommandOutput());
+                    sb.AppendLine("Deleting files...");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+
+                    try
+                    {
+                        // get all file info first
+                        //var folderContents = await portal.GetFolderContentsAsync("LocalAppData", "LocalCache", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                        var folderContents = await portal.GetFolderContentsAsync("CameraRoll");
+                        Debug.WriteLine(folderContents.ToString());
+
+                        // delete
+                        sb.AppendLine("Files:");
+                        foreach (FileOrFolderInformation FOFI in folderContents.Contents)
+                        {
+                            if (!FOFI.Name.Equals("desktop.ini"))
+                            {
+                                //await portal.DeleteFileAsync("LocalAppData", FOFI.Name, "LocalCache", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                                await portal.DeleteFileAsync("CameraRoll", FOFI.Name);
+                                sb.AppendLine("Deleted file: " + FOFI.Name);
+                            }
+                        }
+
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine("Failed to delete files.");
+                        sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+                    }
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+                });
+
+            // upload files
+            Task uploadTask = new Task(
+                async () =>
+                {
+                    sb.Append(this.MarshalGetCommandOutput());
+                    sb.AppendLine("Uploading files...");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+
+                    try
+                    {
+                        // get all files first
+                        String folderPath = @"C:\Users\georg\AppData\Local\Temp\com.irisvr.prospect\geometry";
+                        string[] files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
+
+                        sb.AppendLine("Files:");
+                        for (int i = 0; i < files.Length; i++)
+                        {
+                            Debug.WriteLine(files[i]);
+                            await UploadFile(files[i]);
+                            //await Task.Delay(1000);
+                            sb.Append("File " + files[i] + " uploaded successfully\n");
+                        }
+
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine("Failed to upload files.");
+                        sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+                    }
+                    sb.AppendLine("Uploading complete!");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+                });
+                deleteTask.Wait();
+                uploadTask.Wait();
+        }
+
+        /// <summary>
+        /// Uploads individual files to the Hololens for loading.
+        /// </summary>
+        public Task UploadFile(string fileName)
+        {
+            Task uploadT = new Task(
+                async () =>
+                {
+                    //await portal.UploadFileAsync("LocalAppData", fileName, "LocalCache", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                    await portal.UploadFileAsync("CameraRoll", fileName);
+                });
+            uploadT.Start();
+            return uploadT;
+        }
+
+        /// <summary>
+        /// Click handler for the uploadFiles button.
+        /// </summary>
+        /// <param name="sender">The caller of this method.</param>
+        /// <param name="e">The arguments associated with this event.</param>
+        private void UploadFiles_Click(object sender, RoutedEventArgs e)
+        {
+            this.ClearOutput();
+            this.EnableConnectionControls(false);
+            this.EnableDeviceControls(false);
+
+            StringBuilder sb = new StringBuilder();
+            Task uploadTask = new Task(
+                async () =>
+                {
+                    sb.Append(this.MarshalGetCommandOutput());
+                    sb.AppendLine("Uploading files...");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+
+                    try
+                    {
+                        // get all files first
+                        String folderPath = @"C:\Users\georg\AppData\Local\Temp\com.irisvr.prospect\geometry";
+                        string[] files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
+
+                        sb.AppendLine("Files:");
+                        for(int i = 0; i < files.Length; i++)
+                        {
+                            Debug.WriteLine(files[i]);
+                            await UploadFile(files[i]);
+                            //await Task.Delay(1000);
+                            sb.Append("File " + files[i] + " uploaded successfully\n");
+                        }
+                        
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine("Failed to upload files.");
+                        sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+                    }
+                    sb.AppendLine("Uploading complete!");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+                });
+
+            Task continuationTask = uploadTask.ContinueWith(
+                (t) =>
+                {
+                    this.MarshalEnableDeviceControls(true);
+                    this.MarshalEnableConnectionControls(true);
+                });
+
+            uploadTask.Start();
+        }
+
+        /// <summary>
+        /// Click handler for the resetDirectory button.
+        /// </summary>
+        /// <param name="sender">The caller of this method.</param>
+        /// <param name="e">The arguments associated with this event.</param>
+        private void ResetDirectory_Click(object sender, RoutedEventArgs e)
+        {
+            this.ClearOutput();
+            this.EnableConnectionControls(false);
+            this.EnableDeviceControls(false);
+
+            StringBuilder sb = new StringBuilder();
+            Task deleteTask = new Task(
+                async () =>
+                {
+                    sb.Append(this.MarshalGetCommandOutput());
+                    sb.AppendLine("Deleting files...");
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+
+                    try
+                    {
+                        // get all file info first
+                        //var folderContents = await portal.GetFolderContentsAsync("LocalAppData", "LocalCache", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                        var folderContents = await portal.GetFolderContentsAsync("CameraRoll");
+                        Debug.WriteLine(folderContents.ToString());
+
+                        // delete
+                        sb.AppendLine("Files:");
+                        foreach (FileOrFolderInformation FOFI in folderContents.Contents)
+                        {
+                            if (!FOFI.Name.Equals("desktop.ini"))
+                            {
+                                //await portal.DeleteFileAsync("LocalAppData", FOFI.Name, "LocalCache", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                                await portal.DeleteFileAsync("CameraRoll", FOFI.Name);
+                                sb.AppendLine("Deleted file: " + FOFI.Name);
+                            }
+                        }
+
+                    }
+                    catch (Exception ex)
+                    {
+                        sb.AppendLine("Failed to delete files.");
+                        sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+                    }
+                    this.MarshalUpdateCommandOutput(sb.ToString());
+                });
+
+            Task continuationTask = deleteTask.ContinueWith(
+                (t) =>
+                {
+                    this.MarshalEnableDeviceControls(true);
+                    this.MarshalEnableConnectionControls(true);
+                });
+
+            deleteTask.Start();
         }
 
         /// <summary>
@@ -136,9 +342,10 @@ namespace SampleWdpClient
         /// </summary>
         private void EnableConnectButton()
         {
-            bool enable = (!string.IsNullOrWhiteSpace(this.address.Text) &&
-                        !string.IsNullOrWhiteSpace(this.username.Text) &&
-                        !string.IsNullOrWhiteSpace(this.password.Password));
+            bool enable = true;
+            //bool enable = (!string.IsNullOrWhiteSpace(this.address.Text) &&
+            //            !string.IsNullOrWhiteSpace(this.username.Text) &&
+            //            !string.IsNullOrWhiteSpace(this.password.Password));
 
             this.connectToDevice.IsEnabled = enable;
         }
@@ -165,8 +372,8 @@ namespace SampleWdpClient
             this.rebootDevice.IsEnabled = enable;
             this.shutdownDevice.IsEnabled = enable;
 
-            this.getIPConfig.IsEnabled = enable;
-            this.getWiFiInfo.IsEnabled = enable;
+            this.uploadFiles.IsEnabled = enable;
+            this.resetDirectory.IsEnabled = enable;
         }
 
         /// <summary>
@@ -174,57 +381,58 @@ namespace SampleWdpClient
         /// </summary>
         /// <param name="sender">The caller of this method.</param>
         /// <param name="e">The arguments associated with this event.</param>
-        private void GetIPConfig_Click(object sender, RoutedEventArgs e)
-        {
-            this.ClearOutput();
-            this.EnableConnectionControls(false);
-            this.EnableDeviceControls(false);
+        //private void GetIPConfig_Click(object sender, RoutedEventArgs e)
+        //{
+        //    this.ClearOutput();
+        //    this.EnableConnectionControls(false);
+        //    this.EnableDeviceControls(false);
 
-            StringBuilder sb = new StringBuilder();
-            Task getTask = new Task( 
-                async () =>
-                {
-                    sb.Append(this.MarshalGetCommandOutput());
-                    sb.AppendLine("Getting IP configuration...");
-                    this.MarshalUpdateCommandOutput(sb.ToString());
+        //    StringBuilder sb = new StringBuilder();
+        //    Task getTask = new Task( 
+        //        async () =>
+        //        {
+        //            sb.Append(this.MarshalGetCommandOutput());
+        //            sb.AppendLine("Getting IP configuration...");
+        //            this.MarshalUpdateCommandOutput(sb.ToString());
 
-                    try
-                    {
-                        IpConfiguration ipconfig = await portal.GetIpConfigAsync();
+        //            try
+        //            {
+        //                IpConfiguration ipconfig = await portal.GetIpConfigAsync();
 
-                        foreach (NetworkAdapterInfo adapterInfo in ipconfig.Adapters)
-                        {
-                            sb.Append(" ");
-                            sb.AppendLine(adapterInfo.Description);
-                            sb.Append("  MAC address :");
-                            sb.AppendLine(adapterInfo.MacAddress);
-                            foreach (IpAddressInfo address in adapterInfo.IpAddresses)
-                            {
-                                sb.Append("  IP address :");
-                                sb.AppendLine(address.Address);
-                            }
-                            sb.Append("  DHCP address :");
-                            sb.AppendLine(adapterInfo.Dhcp.Address.Address);
-                        }
-                    }
-                    catch(Exception ex)
-                    {
-                        sb.AppendLine("Failed to get IP config info.");
-                        sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
-                    }
+        //                foreach (NetworkAdapterInfo adapterInfo in ipconfig.Adapters)
+        //                {
+        //                    sb.Append(" ");
+        //                    sb.AppendLine(adapterInfo.Description);
+        //                    sb.Append("  MAC address :");
+        //                    sb.AppendLine(adapterInfo.MacAddress);
+        //                    foreach (IpAddressInfo address in adapterInfo.IpAddresses)
+        //                    {
+        //                        sb.Append("  IP address :");
+        //                        sb.AppendLine(address.Address);
+        //                    }
+        //                    sb.Append("  DHCP address :");
+        //                    sb.AppendLine(adapterInfo.Dhcp.Address.Address);
+        //                }
+        //            }
+        //            catch(Exception ex)
+        //            {
+        //                sb.AppendLine("Failed to get IP config info.");
+        //                sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+        //            }
 
-                    this.MarshalUpdateCommandOutput(sb.ToString());
-                });
+        //            this.MarshalUpdateCommandOutput(sb.ToString());
+        //        });
 
-            Task continuationTask = getTask.ContinueWith(
-                (t) =>
-                {
-                    this.MarshalEnableDeviceControls(true);
-                    this.MarshalEnableConnectionControls(true);
-                });
+        //    Task continuationTask = getTask.ContinueWith(
+        //        (t) =>
+        //        {
+        //            this.MarshalEnableDeviceControls(true);
+        //            this.MarshalEnableConnectionControls(true);
+        //        });
 
-            getTask.Start();
-        }
+        //    getTask.Start();
+        //}
+
 
         /// <summary>
         /// Click handler for the getWifiInfo button.
@@ -275,7 +483,7 @@ namespace SampleWdpClient
                             }
                         };
                     }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         sb.AppendLine("Failed to get WiFi info.");
                         sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
@@ -484,21 +692,22 @@ namespace SampleWdpClient
 
             // We could alternatively ask the user if they wanted to always trust
             // this device and we could persist the thumbprint in some way (registry, database, filesystem, etc).
-            MessageBoxResult result = MessageBox.Show(string.Format(
-                                "Do you want to accept the following certificate?\n\nThumbprint:\n  {0}\nIssuer:\n  {1}", 
-                                cert.Thumbprint,
-                                cert.Issuer),
-                            "Untrusted Certificate Detected", 
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Question,
-                            MessageBoxResult.No);
+            //MessageBoxResult result = MessageBox.Show(string.Format(
+            //                    "Do you want to accept the following certificate?\n\nThumbprint:\n  {0}\nIssuer:\n  {1}", 
+            //                    cert.Thumbprint,
+            //                    cert.Issuer),
+            //                "Untrusted Certificate Detected", 
+            //                MessageBoxButton.YesNo,
+            //                MessageBoxImage.Question,
+            //                MessageBoxResult.No);
 
-            if (result == MessageBoxResult.Yes)
-            {
-                thumbprint = cert.Thumbprint;
-                return true;
-            }
-            return false;
+            //if (result == MessageBoxResult.Yes)
+            //{
+            //    thumbprint = cert.Thumbprint;
+            //    return true;
+            //}
+            //return false;
+            return true;
         }
     }
 }

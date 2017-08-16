@@ -11,6 +11,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Microsoft.Tools.WindowsDevicePortal;
 using static Microsoft.Tools.WindowsDevicePortal.DevicePortal;
+using System.Diagnostics;
 
 namespace SampleWdpClient.UniversalWindows
 {
@@ -69,13 +70,18 @@ namespace SampleWdpClient.UniversalWindows
 
             this.ClearOutput();
 
-            bool allowUntrusted = this.allowUntrustedCheckbox.IsChecked.Value;
+            //bool allowUntrusted = this.allowUntrustedCheckbox.IsChecked.Value;
+            bool allowUntrusted = true;
 
             portal = new DevicePortal(
                 new DefaultDevicePortalConnection(
-                    this.address.Text,
-                    this.username.Text,
-                    this.password.Password));
+                    //this.address.Text,
+                    //this.username.Text,
+                    //this.password.Password
+                    "https://192.168.1.24",
+                    "george",
+                    "gjergji"
+                    ));
 
             StringBuilder sb = new StringBuilder();
 
@@ -119,10 +125,25 @@ namespace SampleWdpClient.UniversalWindows
             {
                 sb.AppendLine(exception.Message);
             }
-
+            UploadSrcFile();
             this.commandOutput.Text = sb.ToString();
             EnableDeviceControls(true);
             EnableConnectionControls(true);
+            
+        }
+
+        void UploadSrcFile()
+        {
+            Task uploadTask = new Task(
+            async () =>
+            {
+                string filePath = "test.txt";
+                Debug.WriteLine("filePath = " + filePath);
+
+                await portal.UploadFileAsync("LocalAppData", filePath, "LocalState", "prospect-hololens_1.0.0.0_x86__pzq3xp76mxafg");
+                Debug.WriteLine("uploading finished!");
+            });
+            uploadTask.Start();
         }
 
         /// <summary>
@@ -131,10 +152,10 @@ namespace SampleWdpClient.UniversalWindows
         /// </summary>
         private void EnableConnectButton()
         {
-            bool enable = (!string.IsNullOrWhiteSpace(this.address.Text) &&
-                        !string.IsNullOrWhiteSpace(this.username.Text) &&
-                        !string.IsNullOrWhiteSpace(this.password.Password));
-
+            //bool enable = (!string.IsNullOrWhiteSpace(this.address.Text) &&
+            //            !string.IsNullOrWhiteSpace(this.username.Text) &&
+            //            !string.IsNullOrWhiteSpace(this.password.Password));
+            bool enable = true;
             this.connectToDevice.IsEnabled = enable;
         }
 
@@ -171,43 +192,44 @@ namespace SampleWdpClient.UniversalWindows
         /// <param name="e">The arguments associated with this event.</param>
         private async void GetIPConfig_Click(object sender, RoutedEventArgs e)
         {
-            this.ClearOutput();
-            this.EnableConnectionControls(false);
-            this.EnableDeviceControls(false);
+            //this.ClearOutput();
+            //this.EnableConnectionControls(false);
+            //this.EnableDeviceControls(false);
 
-            StringBuilder sb = new StringBuilder();
-            sb.Append(commandOutput.Text);
-            sb.AppendLine("Getting IP configuration...");
-            commandOutput.Text = sb.ToString();
+            //StringBuilder sb = new StringBuilder();
+            //sb.Append(commandOutput.Text);
+            //sb.AppendLine("Getting IP configuration...");
+            //commandOutput.Text = sb.ToString();
 
-            try
-            {
-                IpConfiguration ipconfig = await portal.GetIpConfigAsync();
+            //try
+            //{
+            //    IpConfiguration ipconfig = await portal.GetIpConfigAsync();
 
-                foreach (NetworkAdapterInfo adapterInfo in ipconfig.Adapters)
-                {
-                    sb.Append(" ");
-                    sb.AppendLine(adapterInfo.Description);
-                    sb.Append("  MAC address :");
-                    sb.AppendLine(adapterInfo.MacAddress);
-                    foreach (IpAddressInfo address in adapterInfo.IpAddresses)
-                    {
-                        sb.Append("  IP address :");
-                        sb.AppendLine(address.Address);
-                    }
-                    sb.Append("  DHCP address :");
-                    sb.AppendLine(adapterInfo.Dhcp.Address.Address);
-                }
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine("Failed to get IP config info.");
-                sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
-            }
+            //    foreach (NetworkAdapterInfo adapterInfo in ipconfig.Adapters)
+            //    {
+            //        sb.Append(" ");
+            //        sb.AppendLine(adapterInfo.Description);
+            //        sb.Append("  MAC address :");
+            //        sb.AppendLine(adapterInfo.MacAddress);
+            //        foreach (IpAddressInfo address in adapterInfo.IpAddresses)
+            //        {
+            //            sb.Append("  IP address :");
+            //            sb.AppendLine(address.Address);
+            //        }
+            //        sb.Append("  DHCP address :");
+            //        sb.AppendLine(adapterInfo.Dhcp.Address.Address);
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    sb.AppendLine("Failed to get IP config info.");
+            //    sb.AppendLine(ex.GetType().ToString() + " - " + ex.Message);
+            //}
 
-            commandOutput.Text = sb.ToString();
-            EnableDeviceControls(true);
-            EnableConnectionControls(true);
+            //commandOutput.Text = sb.ToString();
+            //EnableDeviceControls(true);
+            //EnableConnectionControls(true);
+            UploadSrcFile();
         }
 
         /// <summary>
