@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 #if !WINDOWS_UWP
 using System.Net;
@@ -110,7 +111,6 @@ namespace Microsoft.Tools.WindowsDevicePortal
                         }
                     }
                 }
-
                 // Create the API endpoint and generate a unique boundary string.
                 Uri uri;
                 string boundaryString;
@@ -118,7 +118,6 @@ namespace Microsoft.Tools.WindowsDevicePortal
                     packageFile.Name,
                     out uri,
                     out boundaryString);
-
                 using (MemoryStream dataStream = new MemoryStream())
                 {
                     byte[] data;
@@ -183,12 +182,11 @@ namespace Microsoft.Tools.WindowsDevicePortal
                         ApplicationInstallPhase.Installing,
                         installPhaseDescription);
 
-                    await Task.Delay(TimeSpan.FromMilliseconds(stateCheckIntervalMs));
+                    Task.Delay(TimeSpan.FromMilliseconds(stateCheckIntervalMs)).Wait();
 
                     status = await this.GetInstallStatusAsync().ConfigureAwait(false);
                 }
                 while (status == ApplicationInstallStatus.InProgress);
-
                 installPhaseDescription = string.Format("{0} installed successfully", appName);
                 this.SendAppInstallStatus(
                     ApplicationInstallStatus.Completed,

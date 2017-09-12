@@ -1,6 +1,7 @@
 ﻿#define DEBUG
 
 using System;
+using System.Collections.Generic;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
@@ -50,9 +51,8 @@ namespace ProspectUpload
         /// Error code meanings
         /// 1 = args issue
         /// 2 = connection issue
-        /// 3 = file deletion issue
-        /// 4 = file upload issue
-        /// 5 = Prospect not on target device
+        /// 3 = file upload issue
+        /// 4 = file deletion issue
         private static int Main(string[] args)
         {
             // settings for debug statements
@@ -77,32 +77,60 @@ namespace ProspectUpload
             password = args[2];
             fileDirectory = args[3].Substring(1, args[3].Length - 2);
 
-            // initialize portal
-            portal = new DevicePortal(new DefaultDevicePortalConnection("https://" + ip, username, password));
+            // add forward slash to all spaces in the filepath
+            //fileDirectory = fileDirectory.Replace(" ", @"\ ");
 
-            // first check to see if Prospect is installed on the targeted Hololens
-            // if it isn't then quit with an error
-            if (IsInstalled().Result == false)
+            // check if wired or wireless connnection, use http for wired and https for wireless
+            // initialize portal accordingly
+            if (ip.StartsWith("localhost"))
             {
-                Debug.WriteLine("Prospect is not on the targeted Hololens. Please install it and try again.");
-                Environment.Exit(5);
+                portal = new DevicePortal(new DefaultDevicePortalConnection("http://" + ip, username, password));
             }
-
+            else
+            {
+                portal = new DevicePortal(new DefaultDevicePortalConnection("https://" + ip, username, password));
+            }
+            
             // delete all files in Hololens directory and upload new files
             Debug.WriteLine("Connecting to Hololens...");
             ConnectToPortal().Wait();
+
+            // first check to see if Prospect is installed on the targeted Hololens
+            // if it isn't, then install it before proceeding
+            if (IsInstalled().Result == false)
+            {
+                Debug.WriteLine("Prospect is not on your device. Installing now.");
+                InstallProspect().Wait();
+                Debug.WriteLine("Prospect has been installed.");
+            }
+
             Debug.WriteLine("Deleting files...\n");
             DeleteFiles().Wait();
             Debug.WriteLine("Deleting complete!\n");
             Debug.WriteLine("Uploading files...\n");
+            // wait before uploading to prevent upload error
+            Task.Delay(1000).Wait();
             UploadFiles().Wait();
             Debug.WriteLine("Uploading complete!");
 
             // check if Prospect is running already, if so then terminate it
             TerminateIfIsRunning().Wait();
 
-            // launch Prospect
-            portal.LaunchApplicationAsync(appId, pkgName).Wait();
+            // launch Prospect and get new updated appId 
+            // if device is asleep and USB-connected, this won't work so catch the error
+            if (IsInstalled().Result == true)
+            {
+                Debug.WriteLine("APPID = " + appId);
+                try
+                {
+                    portal.LaunchApplicationAsync(appId, pkgName).Wait();
+                }
+                catch (Exception e)
+                {
+                    Debug.WriteLine("Device connected over USB and in sleep mode. Cannot start app automatically.");
+                    return 0;
+                }
+            }
             return 0;
         }
 
@@ -174,6 +202,21 @@ namespace ProspectUpload
         }
 
         /// <summary>
+        /// Installs Prospect on device.
+        /// </summary>
+        private static async Task InstallProspect()
+        {
+            // add full dependency filenames to a list 
+            List<string> fileNameList = new List<string>();
+            fileNameList.Add(@"resources\bin\HLExporter\AppBundle\Dependencies\x86\Microsoft.NET.CoreRuntime.1.1.appx");
+            fileNameList.Add(@"resources\bin\HLExporter\AppBundle\Dependencies\x86\Microsoft.VCLibs.x86.14.00.appx");
+
+            // check install status every 1000 milliseconds and have a timeout of 7 mins for the app install
+            await portal.InstallApplicationAsync("Prospect", @"resources\bin\HLExporter\AppBundle\Prospect_1.0.0.0_x86.appxbundle", fileNameList,
+                @"resources\bin\HLExporter\AppBundle\Prospect_1.0.0.0_x86.cer", 1000, 7, true);
+        }
+
+        /// <summary>
         /// Checks to see if Prospect is running on the device in question. If it is, quits out of it.
         /// </summary>
         private static async Task TerminateIfIsRunning()
@@ -196,7 +239,7 @@ namespace ProspectUpload
         }
 
         /// <summary>
-        /// Uploads individual files to the Hololens' CameraRoll or LocalCacheFolder.
+        /// Uploads individual files to the Hololens' CameraRoll or LocalState.
         /// </summary>
         private static async Task UploadFile(string fileName)
         {
@@ -212,7 +255,7 @@ namespace ProspectUpload
         }
 
         /// <summary>
-        /// Uploads files to the application's LocalCacheFolder directory.
+        /// Uploads files to the application's LocalState directory.
         /// </summary>
         private static async Task<bool> UploadFiles()
         {
@@ -234,7 +277,7 @@ namespace ProspectUpload
         }
 
         /// <summary>
-        /// Deletes contents of the CameraRoll or the application's LocalCacheFolder directory.
+        /// Deletes contents of the CameraRoll or the application's LocalState directory.
         /// </summary>
         private static async Task<bool> DeleteFiles()
         {

@@ -4,6 +4,7 @@
 // </copyright>
 //----------------------------------------------------------------------------------------------
 
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Text;
@@ -31,7 +32,6 @@ namespace Microsoft.Tools.WindowsDevicePortal
 
             data = Encoding.ASCII.GetBytes(contentDisposition);
             stream.Write(data, 0, data.Length);
-
             data = Encoding.ASCII.GetBytes(contentType);
             stream.Write(data, 0, data.Length);
 
